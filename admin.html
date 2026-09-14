@@ -1,0 +1,419 @@
+<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tesoro-Flecha | Panel Admin</title><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script><script src="firebase-config.js"></script><style>body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+    }
+    .header {
+      background: linear-gradient(90deg, #1a0a00 0%, #3d1a00 100%);
+      padding: 20px 40px;
+      border-bottom: 2px solid #f5c518;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 {
+      margin: 0;
+      color: #f5c518;
+      font-family: Georgia, serif;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .filters {
+      background: #1c1c1c;
+      padding: 20px;
+      border-radius: 8px;
+      display: flex;
+      gap: 20px;
+      margin-bottom: 20px;
+      align-items: flex-end;
+      border: 1px solid #333;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .form-group label {
+      font-size: 14px;
+      color: #aaa;
+    }
+    .form-group select, .form-group input {
+      padding: 10px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #0a0a0a;
+      color: #fff;
+      font-size: 16px;
+    }
+    .btn {
+      background: #f5c518;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #d4a713; }
+    .btn-secondary {
+      background: #333;
+      color: #fff;
+    }
+    .btn-secondary:hover { background: #444; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #1c1c1c;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 15px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+    th {
+      background: #2a2a2a;
+      color: #f5c518;
+      font-weight: 600;
+    }
+    tr:hover { background: #222; }
+    .empty-state {
+      padding: 40px;
+      text-align: center;
+      color: #888;
+    }
+    .loading-spinner {
+      text-align: center;
+      padding: 40px;
+      color: #f5c518;
+      font-size: 1.2em;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 10px;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      padding: 10px 20px;
+      border-radius: 4px;
+    }
+    .tab-btn.active {
+      color: #f5c518;
+      background: #1c1c1c;
+    }
+    .tab-btn:hover:not(.active) {
+      color: #fff;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Modal Editor */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex; justify-content: center; align-items: center;
+      z-index: 1000;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-panel {
+      background: #1c1c1c; border: 1px solid #444; border-radius: 8px;
+      padding: 30px; width: 100%; max-width: 500px;
+    }</style></head><body><header class="header"><h1>🦅 Panel de Administración - Tesoro Flecha</h1><div style="display: flex; gap: 10px;"><button class="btn" style="background-color:#e74c3c; color:white;" onclick="deleteAllData()">🗑️ Borrar Datos</button> <button class="btn btn-secondary" onclick="exportCSV()">Exportar CSV</button></div></header><div class="container"><div class="tabs"><button class="tab-btn active" onclick="switchTab('resultados')">📊 Resultados</button> <button class="tab-btn" onclick="switchTab('editor')">🗺️ Editor de Destinos</button></div><div id="tab-resultados" class="tab-content active"><div style="display:flex; gap:15px; margin-bottom:25px; flex-wrap:wrap;"><div style="background:#1c1c1c;border:1px solid #333;border-radius:8px;padding:20px 30px;flex:1;min-width:140px;text-align:center;"><div style="font-size:2rem;font-weight:bold;color:#f5c518;" id="stat-registrados">--</div><div style="color:#aaa;font-size:13px;margin-top:5px;">Jugadores registrados</div></div><div style="background:#1c1c1c;border:1px solid #333;border-radius:8px;padding:20px 30px;flex:1;min-width:140px;text-align:center;"><div style="font-size:2rem;font-weight:bold;color:#00d2a0;" id="stat-completaron">--</div><div style="color:#aaa;font-size:13px;margin-top:5px;">Completaron el juego</div></div><div style="background:#1c1c1c;border:1px solid #333;border-radius:8px;padding:20px 30px;flex:1;min-width:140px;text-align:center;"><div style="font-size:2rem;font-weight:bold;color:#e67e22;" id="stat-tasa">--%</div><div style="color:#aaa;font-size:13px;margin-top:5px;">Tasa de finalización</div></div></div><div class="filters"><div class="form-group"><label>Filtrar por Grado</label> <select id="filter-grade" onchange="applyFilters()"><option value="all">Todos los grados</option><option value="4">Cuarto (4°)</option><option value="5">Quinto (5°)</option><option value="6">Sexto (6°)</option><option value="7">Séptimo (7°)</option><option value="8">Octavo (8°)</option><option value="9">Noveno (9°)</option><option value="10">Décimo (10°)</option><option value="11">Once (11°)</option></select></div><div class="form-group"><label>Hora Inicial</label> <input type="time" id="filter-time-start" onchange="applyFilters()"></div><div class="form-group"><label>Hora Final</label> <input type="time" id="filter-time-end" onchange="applyFilters()"></div><button class="btn btn-secondary" style="margin-left:auto;" onclick="resetFilters()">Limpiar Filtros</button></div><div style="margin-bottom: 10px; color: #888;">Total resultados: <span id="result-count">0</span></div><table id="results-table"><thead><tr><th>Nombre</th><th>Grado</th><th>Edad</th><th>Tiempo Total</th><th>Fecha y Hora</th></tr></thead><tbody id="table-body"><tr><td colspan="5" class="loading-spinner">Cargando base de datos...</td></tr></tbody></table></div><div id="tab-editor" class="tab-content"><div style="background:#1c1c1c; padding:20px; border-radius:8px; border:1px solid #333; margin-bottom:20px;"><p style="color:#aaa; margin:0;">Aquí puedes editar las coordenadas y pistas de los 9 destinos del juego. Los cambios se guardarán en Firebase y se aplicarán al instante para todos los jugadores.</p></div><table id="quests-table"><thead><tr><th>ID</th><th>Nombre / Descripción</th><th>Pista</th><th>Coordenadas</th><th>Acción</th></tr></thead><tbody id="quests-body"><tr><td colspan="5" class="loading-spinner">Cargando destinos...</td></tr></tbody></table></div></div><div id="quest-modal" class="modal-overlay hidden"><div class="modal-panel"><h2 style="color:#f5c518; margin-top:0;">Editar Destino</h2><form id="edit-quest-form"><input type="hidden" id="edit-id"><div class="form-group"><label>Nombre del Lugar (ej. La Fortaleza Interior)</label> <input id="edit-name" required></div><div class="form-group" style="margin-top:15px;"><label>Pista para llegar</label> <input id="edit-hint" required></div><div style="display:flex; gap:15px; margin-top:15px;"><div class="form-group" style="flex:1;"><label>Latitud</label> <input type="number" step="any" id="edit-lat" required></div><div class="form-group" style="flex:1;"><label>Longitud</label> <input type="number" step="any" id="edit-lng" required></div></div><div style="display:flex; justify-content:flex-end; gap:10px; margin-top:25px;"><button type="button" class="btn btn-secondary" onclick="closeQuestModal()">Cancelar</button> <button type="submit" class="btn">Guardar Cambios</button></div></form></div></div><script>// La configuración de Firebase ahora se carga automáticamente 
+    // desde firebase-config.js. No necesitas editar nada aquí.
+
+    let allRecords = [];
+
+    // Cargar datos
+    function loadData() {
+      try {
+        const db = firebase.database();
+        
+        // Cargar jugadores registrados (nodo 'jugadores')
+        db.ref('jugadores').once('value', (snapJugadores) => {
+          const totalRegistrados = snapJugadores.exists() ? snapJugadores.numChildren() : 0;
+          document.getElementById('stat-registrados').textContent = totalRegistrados;
+          
+          // Cargar ranking (completaron)
+          db.ref('ranking').once('value', (snapRanking) => {
+            allRecords = [];
+            const totalCompletaron = snapRanking.exists() ? snapRanking.numChildren() : 0;
+            
+            if (snapRanking.exists()) {
+              snapRanking.forEach(child => {
+                allRecords.push(child.val());
+              });
+              allRecords.sort((a,b) => (a.time || 0) - (b.time || 0));
+            }
+            
+            document.getElementById('stat-completaron').textContent = totalCompletaron;
+            const tasa = totalRegistrados > 0
+              ? Math.round((totalCompletaron / totalRegistrados) * 100)
+              : 0;
+            document.getElementById('stat-tasa').textContent = tasa + '%';
+            
+            applyFilters();
+          });
+        });
+      } catch(e) {
+        console.log("Firebase no configurado. Mostrando datos de prueba.");
+        document.getElementById('stat-registrados').textContent = '3';
+        document.getElementById('stat-completaron').textContent = '2';
+        document.getElementById('stat-tasa').textContent = '67%';
+        allRecords = [
+          { name: "Juan Pérez", grade: "10", age: "15", time: 145, timestamp: Date.now() - 3600000 },
+          { name: "Ana Gomez", grade: "8", age: "13", time: 190, timestamp: Date.now() - 7200000 },
+          { name: "Carlos D", grade: "11", age: "16", time: 110, timestamp: Date.now() }
+        ];
+        applyFilters();
+      }
+    }
+
+    // Aplicar filtros
+    function applyFilters() {
+      const grade = document.getElementById('filter-grade').value;
+      const tStartStr = document.getElementById('filter-time-start').value;
+      const tEndStr = document.getElementById('filter-time-end').value;
+
+      const filtered = allRecords.filter(record => {
+        // Filtro Grado
+        if (grade !== 'all' && record.grade !== grade) return false;
+
+        // Filtro Hora
+        if (tStartStr || tEndStr) {
+          const recordDate = new Date(record.timestamp);
+          const recordMins = recordDate.getHours() * 60 + recordDate.getMinutes();
+          
+          if (tStartStr) {
+            const [h, m] = tStartStr.split(':').map(Number);
+            if (recordMins < h*60 + m) return false;
+          }
+          if (tEndStr) {
+            const [h, m] = tEndStr.split(':').map(Number);
+            if (recordMins > h*60 + m) return false;
+          }
+        }
+        return true;
+      });
+
+      renderTable(filtered);
+    }
+
+    // Limpiar filtros
+    function resetFilters() {
+      document.getElementById('filter-grade').value = 'all';
+      document.getElementById('filter-time-start').value = '';
+      document.getElementById('filter-time-end').value = '';
+      applyFilters();
+    }
+
+    // Renderizar tabla
+    function renderTable(data) {
+      const tbody = document.getElementById('table-body');
+      document.getElementById('result-count').textContent = data.length;
+
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No se encontraron resultados</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.map(record => {
+        const mins = String(Math.floor(record.time / 60)).padStart(2, '0');
+        const secs = String(record.time % 60).padStart(2, '0');
+        
+        const date = new Date(record.timestamp);
+        const dateStr = date.toLocaleDateString('es-ES') + ' ' + date.toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'});
+
+        return `
+          <tr>
+            <td><strong>${record.name}</strong></td>
+            <td>${record.grade}°</td>
+            <td>${record.age}</td>
+            <td style="color: #00d2a0; font-family: monospace;">${mins}:${secs}</td>
+            <td style="color: #aaa;">${dateStr}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Exportar CSV
+    function exportCSV() {
+      // Re-aplicar filtros para coger la data que se ve
+      const grade = document.getElementById('filter-grade').value;
+      const tStartStr = document.getElementById('filter-time-start').value;
+      const tEndStr = document.getElementById('filter-time-end').value;
+
+      const filtered = allRecords.filter(record => {
+        if (grade !== 'all' && record.grade !== grade) return false;
+        if (tStartStr || tEndStr) {
+          const recordDate = new Date(record.timestamp);
+          const recordMins = recordDate.getHours() * 60 + recordDate.getMinutes();
+          if (tStartStr) {
+            const [h, m] = tStartStr.split(':').map(Number);
+            if (recordMins < h*60 + m) return false;
+          }
+          if (tEndStr) {
+            const [h, m] = tEndStr.split(':').map(Number);
+            if (recordMins > h*60 + m) return false;
+          }
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        alert("No hay datos para exportar");
+        return;
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += "Nombre,Grado,Edad,Tiempo_Segundos,Tiempo_Formato,Fecha\n";
+
+      filtered.forEach(record => {
+        const mins = String(Math.floor(record.time / 60)).padStart(2, '0');
+        const secs = String(record.time % 60).padStart(2, '0');
+        const date = new Date(record.timestamp);
+        const dateStr = date.toLocaleDateString('es-ES') + ' ' + date.toLocaleTimeString('es-ES');
+        
+        const row = [
+          `"${record.name}"`,
+          record.grade,
+          record.age,
+          record.time,
+          `${mins}:${secs}`,
+          `"${dateStr}"`
+        ];
+        csvContent += row.join(",") + "\n";
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `resultados_tesoro_flecha_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // --- FUNCIONALIDAD TABS ---
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + tabId).classList.add('active');
+      event.currentTarget.classList.add('active');
+    }
+
+    // --- FUNCIONALIDAD EDITOR DE DESTINOS ---
+    let allQuests = {};
+
+    function loadQuestsAdmin() {
+      try {
+        const db = firebase.database();
+        db.ref('quests').on('value', (snapshot) => {
+          if (snapshot.exists()) {
+            allQuests = snapshot.val();
+            renderQuestsTable();
+          } else {
+            document.getElementById('quests-body').innerHTML = '<tr><td colspan="5" class="empty-state">No hay destinos configurados. Inicia el juego una vez para generar los predeterminados.</td></tr>';
+          }
+        });
+      } catch (e) {
+        document.getElementById('quests-body').innerHTML = '<tr><td colspan="5" class="empty-state">No se pudo conectar a Firebase para leer destinos.</td></tr>';
+      }
+    }
+
+    function renderQuestsTable() {
+      const tbody = document.getElementById('quests-body');
+      tbody.innerHTML = Object.values(allQuests).map(q => `
+        <tr>
+          <td><strong>${q.id}</strong><br><span style="color:#aaa;font-size:12px;">(Pieza ${q.pieceIndex + 1})</span></td>
+          <td><strong>${q.name}</strong><br><span style="color:#888;font-size:13px;">${q.description}</span></td>
+          <td style="color:#f5c518;font-style:italic;">"${q.hint}"</td>
+          <td style="font-family:monospace;color:#00d2a0;">${q.latitude},<br>${q.longitude}</td>
+          <td><button class="btn btn-secondary" onclick="openQuestModal('${q.id}')">✏️ Editar</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function openQuestModal(id) {
+      const q = allQuests[id];
+      if (!q) return;
+      document.getElementById('edit-id').value = q.id;
+      document.getElementById('edit-name').value = q.name;
+      document.getElementById('edit-hint').value = q.hint;
+      document.getElementById('edit-lat').value = q.latitude;
+      document.getElementById('edit-lng').value = q.longitude;
+      document.getElementById('quest-modal').classList.remove('hidden');
+    }
+
+    function closeQuestModal() {
+      document.getElementById('quest-modal').classList.add('hidden');
+    }
+
+    document.getElementById('edit-quest-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = document.getElementById('edit-id').value;
+      const q = allQuests[id];
+      if (!q) return;
+
+      q.name = document.getElementById('edit-name').value;
+      q.hint = document.getElementById('edit-hint').value;
+      q.latitude = parseFloat(document.getElementById('edit-lat').value);
+      q.longitude = parseFloat(document.getElementById('edit-lng').value);
+
+      firebase.database().ref('quests/' + id).set(q)
+        .then(() => {
+          closeQuestModal();
+          // alert("Destino actualizado exitosamente");
+        })
+        .catch(err => {
+          console.error("Error guardando quest", err);
+          alert("Error guardando los cambios.");
+        });
+    });
+
+    // --- FUNCIONALIDAD BORRAR DATOS ---
+    function deleteAllData() {
+      const confirmacion = confirm("⚠️ ADVERTENCIA: Estás a punto de borrar TODOS los registros de jugadores y tiempos. Esto NO borrará los destinos del juego.\n\n¿Estás completamente seguro de querer limpiar la base de datos?");
+      if (confirmacion) {
+        const db = firebase.database();
+        // Borramos nodo jugadores y nodo ranking
+        Promise.all([
+          db.ref('jugadores').remove(),
+          db.ref('ranking').remove()
+        ]).then(() => {
+          alert("✅ Todos los datos de jugadores han sido eliminados.");
+          // Recargar la página para limpiar la tabla visualmente
+          window.location.reload();
+        }).catch((err) => {
+          console.error("Error al borrar datos:", err);
+          alert("❌ Hubo un error al intentar borrar los datos.");
+        });
+      }
+    }
+
+    // Iniciar
+    window.onload = () => {
+      loadData();
+      loadQuestsAdmin();
+    };</script></body></html>

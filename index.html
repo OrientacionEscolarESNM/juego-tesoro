@@ -1,0 +1,1095 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Encuentra el Tesoro</title><script crossorigin="anonymous" src="external/runtime/runtime.js"></script><script crossorigin="anonymous" src="external/xr/xr.js" async="true" data-preload-chunks="face, slam"></script><script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script><script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script><script defer="defer" src="bundle.js"></script><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script><style>/* RESET Y BASE */
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    /* ── PANTALLA DE CARGA 8th Wall PERSONALIZADA ── */
+    #loadBackground {
+      background: radial-gradient(ellipse at center, #1a0a00 0%, #000 100%) !important;
+    }
+    /* Animar los puntos de carga nativos con color dorado */
+    #loadBackground > * {
+      filter: hue-rotate(200deg) saturate(3) brightness(1.5) !important;
+    }
+    #requestingCameraPermissions {
+      display: none !important;
+    }
+    /* Overlay propio de "cargando" que se muestra encima */
+    #custom-loading {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(61,26,0,0.97) 0%, rgba(0,0,0,0.98) 100%);
+      z-index: 7500;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      transition: opacity 0.8s ease;
+    }
+    #custom-loading.fade-out { opacity: 0; pointer-events: none; }
+    #custom-loading .cl-title {
+      font-family: Georgia, serif;
+      font-size: 28px;
+      font-weight: bold;
+      color: #f5c518;
+      text-shadow: 0 0 20px rgba(245,197,24,0.8);
+      letter-spacing: 2px;
+    }
+    #custom-loading .cl-sub {
+      color: #aaa;
+      font-size: 15px;
+      letter-spacing: 1px;
+    }
+    #custom-loading .cl-dots {
+      display: flex; gap: 10px;
+    }
+    #custom-loading .cl-dots span {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #f5c518;
+      animation: dotPulse 1.4s ease-in-out infinite both;
+    }
+    #custom-loading .cl-dots span:nth-child(2) { animation-delay: 0.2s; }
+    #custom-loading .cl-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dotPulse {
+      0%, 80%, 100% { transform: scale(0.4); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    /* MARCO DE LA CÁMARA AR */
+    .ar-camera-frame {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      right: 15px;
+      bottom: 15px;
+      pointer-events: none;
+      z-index: 50;
+      /* Debajo de los modales y botones, encima del canvas */
+      border: 3px solid rgba(245, 197, 24, 0.5);
+      /* Dorado semitransparente */
+      border-radius: 15px;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.4), 0 0 15px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Esquinas decorativas del marco */
+    .ar-camera-frame::before,
+    .ar-camera-frame::after {
+      content: '';
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f5c518;
+      border-radius: 5px;
+    }
+
+    .ar-camera-frame::before {
+      top: -4px;
+      left: -4px;
+      border-right: none;
+      border-bottom: none;
+      border-top-left-radius: 15px;
+    }
+
+    .ar-camera-frame::after {
+      bottom: -4px;
+      right: -4px;
+      border-left: none;
+      border-top: none;
+      border-bottom-right-radius: 15px;
+    }
+
+    /* MODAL DE SELECCIÓN DE QUESTS */
+    .modal {
+      display: none;
+      /* Oculto por defecto. Se abre con el botón Cartilla */
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      overflow: auto;
+    }
+
+    .modal-content {
+      background-color: #fefefe;
+      margin: 5% auto;
+      padding: 30px;
+      border-radius: 20px;
+      width: 90%;
+      max-width: 600px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+
+    .modal-content h2 {
+      text-align: center;
+      margin-bottom: 25px;
+      color: #2d3436;
+      font-size: 24px;
+    }
+
+    /* GRID DE QUESTS */
+    .quests-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .quest-card {
+      border: 3px solid #dfe6e9;
+      border-radius: 15px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: white;
+    }
+
+    .quest-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+      border-color: #00b894;
+    }
+
+    .quest-card.selected {
+      border-color: #00b894;
+      border-width: 4px;
+      box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.3);
+    }
+
+    .quest-card img {
+      width: 100%;
+      aspect-ratio: 664 / 824;
+      height: auto;
+      object-fit: cover;
+      background: #b2bec3;
+    }
+
+    .quest-card .quest-label {
+      padding: 10px;
+      text-align: center;
+      font-weight: bold;
+      color: #2d3436;
+      font-size: 14px;
+    }
+
+    .close-btn {
+      position: absolute;
+      top: 20px;
+      right: 25px;
+      font-size: 28px;
+      font-weight: bold;
+      color: #aaa;
+      cursor: pointer;
+      background: none;
+      border: none;
+    }
+
+    .close-btn:hover {
+      color: #000;
+    }
+
+    /* INFORMACIÓN DEL QUEST ACTIVO */
+    .quest-info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 10px;
+      z-index: 100;
+      backdrop-filter: blur(5px);
+      display: none;
+    }
+
+    .quest-name {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .quest-distance {
+      font-size: 24px;
+      font-weight: bold;
+      color: #00b894;
+    }
+
+    /* BOTÓN DE CAPTURA */
+    #btn-captura {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 15px 40px;
+      background: #FF4757;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4);
+      z-index: 100;
+      display: none;
+    }
+
+    #btn-captura:active {
+      transform: translateX(-50%) scale(0.95);
+    }
+
+    #btn-captura:disabled {
+      background: #b2bec3;
+      cursor: not-allowed;
+    }
+
+    /* MENSAJE DE RETROALIMENTACIÓN */
+    #mensaje {
+      position: absolute;
+      bottom: 120px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-size: 20px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s;
+      z-index: 100;
+    }
+
+    /* OCULTAR BOTÓN VR DE A-FRAME */
+    .a-enter-vr {
+      display: none !important;
+    }
+
+    /* INDICADOR DE CARGA */
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 24px;
+      z-index: 200;
+      display: none;
+    }
+
+    /* RESPONSIVE: siempre 3 columnas para la cartilla */
+    @media (max-width: 600px) {
+      .quests-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .quest-card .quest-label {
+        font-size: 10px;
+        padding: 4px;
+      }
+
+      .modal-content {
+        margin: 2% auto;
+        padding: 15px;
+      }
+    }
+
+    /* INYECTADO DESDE STYLE.CSS */
+    /* =========================================
+   PANTALLA DE BIENVENIDA
+   ========================================= */
+
+    #welcome-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 8000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(61, 26, 0, 0.85) 0%, rgba(0, 0, 0, 0.95) 100%);
+      transition: opacity 0.8s ease;
+    }
+
+    #welcome-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .welcome-content {
+      text-align: center;
+      z-index: 2;
+      padding: 20px;
+    }
+
+    .welcome-fire {
+      font-size: 48px;
+      animation: fireFloat 2s ease-in-out infinite alternate;
+    }
+
+    @keyframes fireFloat {
+      from {
+        transform: translateY(0) scale(1);
+        filter: drop-shadow(0 0 10px #f5c518);
+      }
+
+      to {
+        transform: translateY(-15px) scale(1.1);
+        filter: drop-shadow(0 0 25px #ff6b00);
+      }
+    }
+
+    .welcome-title {
+      font-size: 38px;
+      font-weight: 900;
+      color: #f5c518;
+      text-shadow: 0 0 20px rgba(245, 197, 24, 0.8), 0 2px 4px rgba(0, 0, 0, 0.9);
+      margin: 10px 0;
+      line-height: 1.2;
+      font-family: Georgia, serif;
+      letter-spacing: 2px;
+    }
+
+    .welcome-subtitle {
+      color: #ddd;
+      font-size: 16px;
+      margin-bottom: 40px;
+      opacity: 0.8;
+    }
+
+    .welcome-scan-prompt {
+      border: 2px solid rgba(245, 197, 24, 0.5);
+      border-radius: 20px;
+      padding: 20px 30px;
+      background: rgba(245, 197, 24, 0.08);
+      animation: promptPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes promptPulse {
+
+      0%,
+      100% {
+        border-color: rgba(245, 197, 24, 0.3);
+        box-shadow: 0 0 10px rgba(245, 197, 24, 0.2);
+      }
+
+      50% {
+        border-color: rgba(245, 197, 24, 0.9);
+        box-shadow: 0 0 30px rgba(245, 197, 24, 0.5);
+      }
+    }
+
+    .scan-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+      animation: scanBounce 1.5s ease-in-out infinite;
+    }
+
+    @keyframes scanBounce {
+
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.2);
+      }
+    }
+
+    .welcome-scan-prompt p {
+      color: #f5c518;
+      font-size: 16px;
+      font-weight: bold;
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    /* Partículas flotantes de fondo */
+    .welcome-particles {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      top: 0;
+      left: 0;
+    }
+
+    .welcome-particles span {
+      position: absolute;
+      display: block;
+      width: 8px;
+      height: 8px;
+      background: #f5c518;
+      border-radius: 50%;
+      animation: particleFloat 6s linear infinite;
+      opacity: 0;
+    }
+
+    .welcome-particles span:nth-child(1) {
+      left: 10%;
+      animation-delay: 0s;
+      animation-duration: 7s;
+      width: 6px;
+      height: 6px;
+    }
+
+    .welcome-particles span:nth-child(2) {
+      left: 25%;
+      animation-delay: 1s;
+      animation-duration: 5s;
+      background: #ff6b00;
+    }
+
+    .welcome-particles span:nth-child(3) {
+      left: 40%;
+      animation-delay: 2s;
+      animation-duration: 8s;
+      width: 4px;
+      height: 4px;
+    }
+
+    .welcome-particles span:nth-child(4) {
+      left: 55%;
+      animation-delay: 0.5s;
+      animation-duration: 6s;
+      background: #fff;
+    }
+
+    .welcome-particles span:nth-child(5) {
+      left: 70%;
+      animation-delay: 1.5s;
+      animation-duration: 7s;
+    }
+
+    .welcome-particles span:nth-child(6) {
+      left: 85%;
+      animation-delay: 2.5s;
+      animation-duration: 5s;
+      background: #ff6b00;
+      width: 5px;
+      height: 5px;
+    }
+
+    .welcome-particles span:nth-child(7) {
+      left: 15%;
+      animation-delay: 3s;
+      animation-duration: 9s;
+    }
+
+    .welcome-particles span:nth-child(8) {
+      left: 50%;
+      animation-delay: 3.5s;
+      animation-duration: 6s;
+      width: 3px;
+      height: 3px;
+    }
+
+    .welcome-particles span:nth-child(9) {
+      left: 65%;
+      animation-delay: 4s;
+      animation-duration: 8s;
+      background: #fff;
+    }
+
+    .welcome-particles span:nth-child(10) {
+      left: 80%;
+      animation-delay: 1s;
+      animation-duration: 5s;
+    }
+
+    @keyframes particleFloat {
+      0% {
+        bottom: -10px;
+        opacity: 0;
+        transform: translateX(0);
+      }
+
+      10% {
+        opacity: 0.7;
+      }
+
+      90% {
+        opacity: 0.4;
+      }
+
+      100% {
+        bottom: 110%;
+        opacity: 0;
+        transform: translateX(40px);
+      }
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+
+    #cartilla-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: linear-gradient(45deg, #f5c518, #e67e22);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 30px;
+      font-weight: bold;
+      border: none;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      cursor: pointer;
+      z-index: 9999;
+      font-size: 16px;
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      margin: 8px 0;
+    }
+
+    .check {
+      width: 22px;
+      height: 22px;
+      border: 2px solid #888;
+      border-radius: 50%;
+      margin-right: 10px;
+    }
+
+    .check.completado {
+      background: #00b894;
+      border-color: #00b894;
+      color: white;
+    }
+
+    .check.completado::after {
+      content: '✓';
+    }
+
+    #btn-foto {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 15px 35px;
+      background: #FF4757;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-size: 18px;
+      cursor: pointer;
+      z-index: 100;
+    }
+
+    #mensaje {
+      position: absolute;
+      bottom: 120px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-size: 18px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s;
+      z-index: 100;
+    }
+
+    /* MODAL DE SELECCIÓN DE QUESTS */
+    .modal {
+      display: none;
+      /* Oculto por defecto */
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      overflow: auto;
+    }
+
+    .modal-content {
+      background-color: #fefefe;
+      margin: 5% auto;
+      padding: 30px;
+      border-radius: 20px;
+      width: 90%;
+      max-width: 600px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-content h2 {
+      text-align: left;
+      margin-bottom: 25px;
+      margin-top: 0;
+      color: #2d3436;
+      padding-right: 10px;
+      font-size: 20px;
+      line-height: 1.3;
+    }
+
+    /* GRID DE QUESTS - siempre 3 columnas */
+    .quests-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .quest-card {
+      border: 3px solid #dfe6e9;
+      border-radius: 10px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: white;
+      position: relative;
+    }
+
+    .quest-card:active {
+      transform: scale(0.97);
+      border-color: #00b894;
+    }
+
+    .quest-card.selected {
+      border-color: #f5c518;
+      border-width: 4px;
+      box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.4);
+    }
+
+    .quest-card img {
+      width: 100%;
+      aspect-ratio: 664 / 824;
+      height: auto;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Responsive - la cartilla usa pantalla completa en móvil */
+    @media (max-width: 600px) {
+      .modal-content {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        padding: 15px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .quests-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        flex: 1;
+      }
+    }
+
+    /* =========================================
+   NUEVOS ESTILOS: SISTEMA DE JUEGO (UI)
+   ========================================= */
+
+    /* Overlays a pantalla completa */
+    .ui-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 2000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      backdrop-filter: blur(8px);
+      transition: opacity 0.3s ease;
+    }
+
+    .ui-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Paneles de vidrio templado (Glassmorphism) */
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      padding: 30px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+      color: white;
+      text-align: center;
+    }
+
+    /* ── PUZZLE PANEL: más grande ── */
+    .puzzle-panel {
+      max-width: 95vw !important;
+      width: 95vw !important;
+      padding: 20px 15px !important;
+      box-sizing: border-box;
+    }
+    .puzzle-board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 3px;
+      width: 90vw;
+      max-width: 480px;
+      height: 90vw;
+      max-height: 480px;
+      margin: 10px auto;
+      border: 3px solid #f5c518;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .puzzle-slot {
+      border: 2px dashed rgba(245,197,24,0.4);
+      position: relative;
+      overflow: hidden;
+      background: rgba(0,0,0,0.3);
+    }
+    .puzzle-piece {
+      width: 100%;
+      height: 100%;
+      background-size: 300% 300%;
+      cursor: grab;
+      /* Borde decorado para dar efecto de pieza de rompecabezas */
+      box-shadow: inset 0 0 0 3px rgba(255,255,255,0.25), inset 0 0 12px rgba(0,0,0,0.4);
+      border-radius: 4px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .puzzle-piece:active {
+      transform: scale(0.95);
+      cursor: grabbing;
+      box-shadow: inset 0 0 0 3px #f5c518, 0 4px 15px rgba(245,197,24,0.5);
+    }
+    .puzzle-timer {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #00d2a0;
+      margin: 5px 0;
+      font-family: monospace;
+      text-shadow: 0 0 10px rgba(0,210,160,0.5);
+    }
+    /* Botón de abandonar */
+    .btn-abandon {
+      background: transparent;
+      border: 1px solid #ff6b6b;
+      color: #ff6b6b;
+      padding: 8px 20px;
+      border-radius: 30px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 10px;
+      width: 100%;
+    }
+    .btn-abandon:hover { background: rgba(255,107,107,0.15); }
+
+    /* ── PANTALLA FIN DEL JUEGO ── */
+    #endgame-overlay {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(30,10,0,0.97) 0%, rgba(0,0,0,0.98) 100%);
+      z-index: 8500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #endgame-overlay.hidden { display: none; }
+    .endgame-panel {
+      text-align: center;
+      padding: 40px 30px;
+      max-width: 380px;
+      width: 90%;
+      animation: fadeInUp 0.6s ease;
+    }
+    @keyframes fadeInUp {
+      from { opacity:0; transform: translateY(30px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+    .endgame-trophy { font-size: 80px; animation: bounceIn 0.8s ease; }
+    @keyframes bounceIn {
+      0% { transform: scale(0); }
+      60% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+    .endgame-title {
+      font-family: Georgia, serif;
+      font-size: 30px;
+      color: #f5c518;
+      text-shadow: 0 0 15px rgba(245,197,24,0.7);
+      margin: 15px 0 5px;
+    }
+    .endgame-time {
+      font-size: 22px;
+      color: #00d2a0;
+      font-family: monospace;
+      margin: 10px 0 25px;
+    }
+    .endgame-sub { color: #bbb; font-size: 15px; margin-bottom: 25px; line-height: 1.5; }
+
+    .title-gold {
+      color: #f5c518;
+      margin-top: 0;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+      font-size: 24px;
+    }
+
+    /* Formularios */
+    .form-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: #ddd;
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255, 255, 255, 0.9);
+      color: #333;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    /* Botones */
+    .btn-primary {
+      background: linear-gradient(45deg, #f5c518, #e67e22);
+      color: #fff;
+      border: none;
+      padding: 15px 30px;
+      border-radius: 50px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 5px 15px rgba(245, 197, 24, 0.4);
+      text-transform: uppercase;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 2px solid #aaa;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 50px;
+      margin-top: 15px;
+      cursor: pointer;
+    }
+
+    /* Rompecabezas */
+    .puzzle-board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      margin: 20px auto;
+      width: 300px;
+      height: 300px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid #f5c518;
+    }
+
+    .puzzle-slot {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px dashed rgba(255, 255, 255, 0.2);
+      position: relative;
+    }
+
+    .puzzle-piece {
+      width: 100%;
+      height: 100%;
+      background-size: 300px 300px;
+      /* Tamaño total de la imagen */
+      cursor: grab;
+      position: relative;
+      z-index: 10;
+    }
+
+    .puzzle-timer {
+      font-size: 32px;
+      font-family: monospace;
+      font-weight: bold;
+      color: #00b894;
+      margin: 10px 0;
+    }
+
+    /* Ranking */
+    .ranking-list {
+      max-height: 60vh;
+      overflow-y: auto;
+      text-align: left;
+      margin-bottom: 20px;
+    }
+
+    .ranking-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      align-items: center;
+    }
+
+    .ranking-item:nth-child(1) {
+      background: rgba(245, 197, 24, 0.2);
+      border-left: 4px solid #f5c518;
+    }
+
+    .ranking-item:nth-child(2) {
+      background: rgba(192, 192, 192, 0.2);
+      border-left: 4px solid #C0C0C0;
+    }
+
+    .ranking-item:nth-child(3) {
+      background: rgba(205, 127, 50, 0.2);
+      border-left: 4px solid #CD7F32;
+    }
+
+    .r-pos {
+      font-weight: bold;
+      font-size: 20px;
+      width: 30px;
+    }
+
+    .r-name {
+      flex-grow: 1;
+      font-weight: bold;
+    }
+
+    .r-time {
+      color: #00b894;
+      font-family: monospace;
+      font-size: 16px;
+    }
+
+    /* ── AVISO DE ESCANEO (segunda pantalla, sobre la cámara AR) ── */
+    #scan-instruction {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 7000;
+      width: 88%;
+      max-width: 400px;
+      display: none;
+      /* se activa desde JS al iniciar AR */
+      animation: slideUp 0.6s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateX(-50%) translateY(40px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+      }
+    }
+
+    #scan-instruction.hidden {
+      display: none !important;
+    }
+
+    .scan-frame {
+      background: rgba(0, 0, 0, 0.75);
+      border: 2px solid #f5c518;
+      border-radius: 20px;
+      padding: 20px 24px;
+      box-shadow:
+        0 0 0 1px rgba(245, 197, 24, 0.2),
+        0 0 20px rgba(245, 197, 24, 0.3),
+        inset 0 0 20px rgba(245, 197, 24, 0.05);
+      backdrop-filter: blur(10px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Línea de escaneo animada */
+    .scan-frame::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #f5c518, transparent);
+      animation: scanLine 2s linear infinite;
+    }
+
+    @keyframes scanLine {
+      0% {
+        top: 0%;
+        opacity: 0;
+      }
+
+      10% {
+        opacity: 1;
+      }
+
+      90% {
+        opacity: 1;
+      }
+
+      100% {
+        top: 100%;
+        opacity: 0;
+      }
+    }
+
+    /* Esquinas decorativas */
+    .scan-frame::before {
+      content: '';
+      position: absolute;
+      inset: 6px;
+      border: 1px solid rgba(245, 197, 24, 0.15);
+      border-radius: 14px;
+      pointer-events: none;
+    }
+
+    .scan-frame-icon {
+      font-size: 30px;
+      display: block;
+      text-align: center;
+      margin-bottom: 10px;
+      animation: iconPulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes iconPulse {
+
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.15);
+      }
+    }
+
+    .scan-frame-text {
+      color: #fff;
+      font-size: 15px;
+      line-height: 1.6;
+      text-align: center;
+      margin: 0;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    }
+
+    .scan-frame-text strong {
+      color: #f5c518;
+    }</style></head><body><div id="custom-loading"><div class="cl-title">🦅 Tesoro-Flecha</div><div class="cl-sub">Preparando la experiencia AR...</div><div class="cl-dots"><span></span><span></span><span></span></div></div><button id="cartilla-btn" onclick="document.getElementById('quest-selector').style.display='block'" style="display:none">📖 Cartilla</button><div id="welcome-overlay"><div class="welcome-particles"><span></span><span></span><span></span><span></span><span></span> <span></span><span></span><span></span><span></span><span></span></div><div class="welcome-content"><div class="welcome-fire">🔥🦅🔥</div><h1 class="welcome-title">La Búsqueda<br>del Tesoro</h1><p class="welcome-subtitle">Una aventura mágica te espera</p><div class="welcome-scan-prompt"><div class="scan-icon">📷</div><p>Asegúrate de tener el volumen encendido</p></div><button id="btn-comenzar" class="btn-primary" style="margin-top: 30px;">Empezar Experiencia AR</button></div></div><div id="quest-selector" class="modal"><div class="modal-content"><h2>📜 Tu Cartilla<br><span style="font-size:16px;color:#e67e22;font-weight:600;">de Tesoros</span></h2><div class="quests-grid" id="quests-grid"></div><button id="btn-abandon-cartilla" class="btn-abandon" style="margin-top:20px;">⛔ Abandonar partida</button></div></div><div id="quest-info" class="quest-info"><div class="quest-name" id="current-quest-name">Quest Name</div><div class="quest-distance" id="current-quest-distance">-- m</div></div><template id="ar-scene-template"><a-scene device-orientation-permission-ui="enabled: true" renderer="alpha: true; colorManagement: true" vr-mode-ui="enabled: false" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:1; background:transparent;"><a-assets timeout="10000"><a-asset-item id="modelo-ave" src="assets/phoenix_bird.glb"></a-asset-item><a-asset-item id="modelo-flecha" src="assets/flecha.glb"></a-asset-item><a-asset-item id="modelo-butterflies" src="assets/butterflies.glb"></a-asset-item><a-asset-item id="modelo-hoja" src="assets/hoja_de_elefante.glb"></a-asset-item><a-asset-item id="modelo-colibri" src="assets/colibri.glb"></a-asset-item><a-asset-item id="modelo-girasol" src="assets/girasol.glb"></a-asset-item><a-asset-item id="modelo-flores" src="assets/flores.glb"></a-asset-item><a-asset-item id="modelo-stop" src="assets/stop.glb"></a-asset-item><audio id="audio-error" src="assets/target-error.mp3" preload="auto"></audio><audio id="audio-success" src="assets/success.mp3" preload="auto"></audio><audio id="audio-target-correcto" src="assets/target-correcto.mp3" preload="auto"></audio><audio id="audio-target-equivocado" src="assets/target-equivocado.mp3" preload="auto"></audio></a-assets><a-camera id="camera" position="0 1.6 0" look-controls="enabled: true"><a-entity id="flecha" position="0 -0.3 -1.5" visible="false"><a-entity gltf-model="#modelo-flecha" scale="0.064 0.064 0.064" rotation="0 0 0"></a-entity></a-entity><a-entity id="mariposas" visible="false"><a-entity position="-0.5 0.2 -1.2" animation="property: rotation; to: 0 360 0; loop: true; dur: 4000; easing: linear"><a-plane width="0.12" height="0.09" color="#FFD700" opacity="0.85" rotation="0 0 -20" animation="property: rotation; to: 0 0 20; loop: true; dur: 300; dir: alternate; easing: easeInOutSine"></a-plane><a-plane width="0.12" height="0.09" color="#FFA500" opacity="0.85" rotation="0 0 20" animation="property: rotation; to: 0 0 -20; loop: true; dur: 300; dir: alternate; easing: easeInOutSine"></a-plane></a-entity><a-entity position="0.6 0.0 -1.3" animation="property: rotation; to: 0 -360 0; loop: true; dur: 5000; easing: linear"><a-plane width="0.10" height="0.07" color="#FF69B4" opacity="0.85" rotation="0 0 -20" animation="property: rotation; to: 0 0 20; loop: true; dur: 400; dir: alternate; easing: easeInOutSine"></a-plane><a-plane width="0.10" height="0.07" color="#FF1493" opacity="0.85" rotation="0 0 20" animation="property: rotation; to: 0 0 -20; loop: true; dur: 400; dir: alternate; easing: easeInOutSine"></a-plane></a-entity><a-entity position="0.1 -0.4 -1.1" animation="property: position; to: 0.3 -0.2 -1.1; loop: true; dur: 2000; dir: alternate; easing: easeInOutSine"><a-plane width="0.09" height="0.07" color="#00CED1" opacity="0.85" rotation="0 0 -20" animation="property: rotation; to: 0 0 20; loop: true; dur: 350; dir: alternate; easing: easeInOutSine"></a-plane><a-plane width="0.09" height="0.07" color="#20B2AA" opacity="0.85" rotation="0 0 20" animation="property: rotation; to: 0 0 -20; loop: true; dur: 350; dir: alternate; easing: easeInOutSine"></a-plane></a-entity><a-entity position="-0.3 -0.3 -1.4" animation="property: position; to: -0.5 -0.1 -1.4; loop: true; dur: 2500; dir: alternate; easing: easeInOutSine"><a-plane width="0.11" height="0.08" color="#9370DB" opacity="0.85" rotation="0 0 -20" animation="property: rotation; to: 0 0 20; loop: true; dur: 380; dir: alternate; easing: easeInOutSine"></a-plane><a-plane width="0.11" height="0.08" color="#8A2BE2" opacity="0.85" rotation="0 0 20" animation="property: rotation; to: 0 0 -20; loop: true; dur: 380; dir: alternate; easing: easeInOutSine"></a-plane></a-entity></a-entity></a-camera><a-entity id="ave-guia" position="0 0 -2" arrow-guide visible="false"><a-entity id="modelo-ave-ent" gltf-model="#modelo-ave" scale="0.0015 0.0015 0.0015" rotation="0 180 0" animation-mixer="clip: *; timeScale: 1;"></a-entity></a-entity><a-entity id="arrival-circles" visible="false"><a-circle color="#00b894" radius="1" opacity="0.3" position="0 0 -5"></a-circle><a-circle color="#00b894" radius="0.5" opacity="0.5" position="0 0 -5"></a-circle></a-entity></a-scene></template><div id="scan-instruction"><div class="scan-frame"><span class="scan-frame-icon">📷 🔍 🔥</span><p class="scan-frame-text">¡Hola! Para empezar a jugar, <strong>mueve tu cámara</strong> y apunta directamente a la <strong>imagen de inicio</strong> de la Búsqueda del Tesoro.<br><br>¡Vamos, encuéntrala!</p></div></div><div class="ar-camera-frame"></div><div id="mensaje"></div><div id="giant-x" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 15rem; color: #ff2a2a; z-index: 9999; font-weight: bold; text-shadow: 0 0 20px rgba(0,0,0,0.8); pointer-events: none; font-family: sans-serif;">X</div><div id="giant-check" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 15rem; color: #00b894; z-index: 9999; font-weight: bold; text-shadow: 0 0 20px rgba(0,0,0,0.8); pointer-events: none; font-family: sans-serif;">✓</div><div id="loading" class="loading">Cargando...</div><div id="registration-overlay" class="ui-overlay hidden"><div class="glass-panel registration-panel"><h2 class="title-gold">¡Comienza la Búsqueda!</h2><p>Regístrate para guardar tu progreso y competir en el ranking.</p><form id="registration-form"><div class="form-group"><label>Nombre o Apodo</label> <input id="reg-name" required placeholder="Ej: Buscador Fénix"></div><div class="form-group"><label>Grado</label> <select id="reg-grade" required><option value="">Selecciona tu grado...</option><option value="4">4°</option><option value="5">5°</option><option value="6">6°</option><option value="7">7°</option><option value="8">8°</option><option value="9">9°</option><option value="10">10°</option><option value="11">11°</option><option value="profesor">Profesor/Otro</option></select></div><div class="form-group"><label>Edad</label> <input type="number" id="reg-age" required min="5" max="99" placeholder="Ej: 15"></div><button type="submit" class="btn-primary">INICIAR BÚSQUEDA</button></form></div></div><div id="puzzle-overlay" class="ui-overlay hidden"><div class="glass-panel puzzle-panel"><h2 class="title-gold">¡El Tesoro Revelado!</h2><p style="margin:0 0 5px;font-size:13px;color:#ccc;">Arrastra las piezas para armar la imagen</p><p class="puzzle-timer" id="puzzle-timer">00:00</p><div class="puzzle-board" id="puzzle-board"></div><button id="btn-submit-puzzle" class="btn-primary hidden" style="margin-top:12px;">¡HECHO! PUBLICAR MI TIEMPO</button> <button id="btn-abandon-puzzle" class="btn-abandon">⛔ Abandonar partida</button></div></div><div id="ranking-overlay" class="ui-overlay hidden"><div class="glass-panel ranking-panel"><h2 class="title-gold">🏆 Salón de la Fama</h2><p style="color:#bbb;font-size:13px;margin:0 0 15px;">Los mejores buscadores de tesoros</p><div class="ranking-list" id="ranking-list"><p class="loading-text">Cargando posiciones...</p></div><button id="btn-close-ranking" class="btn-secondary" style="margin-top:15px;">Cerrar</button></div></div><div id="endgame-overlay" class="hidden"><div class="endgame-panel"><div class="endgame-trophy">🏆</div><h2 class="endgame-title">¡Felicitaciones!</h2><p class="endgame-sub">Completaste el Tesoro-Flecha.<br>Tu tiempo total fue:</p><p class="endgame-time" id="endgame-time">--:--</p><button id="btn-endgame-restart" class="btn-primary">🔄 Volver al Inicio</button></div></div></body></html>
